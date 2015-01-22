@@ -93,15 +93,13 @@ func periodic_expiry_check() {
 
 				hmutex.Lock()
 				item := exp_heap[0]
-				for item.priority >= time.Now().Unix() {
+				for item.priority <= time.Now().Unix() {
 
 					item = heap.Pop(&exp_heap).(*exp_struct)
 
 					mutex.Lock()
 					delete(memmap, item.value)
 					mutex.Unlock()
-
-					fmt.Printf("%.2d:%s ", item.priority, item.value)
 					if exp_heap.Len() > 0 {
 						item = exp_heap[0]
 					} else {
@@ -272,8 +270,6 @@ func handleconnection(con net.Conn) {
 
 						new_exp := time.Now().Unix() + int64(expirytime)
 						memmap[key] = mapval{expirytime, 0, numbytes, value, new_exp}
-						fmt.Println(" Key value is ", key)
-
 						//TODO: calculate remaining time in CAS
 						//Below if will add key to expiry heap
 
