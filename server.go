@@ -36,7 +36,6 @@ memmap is the key value store
 var memmap = make(map[string]mapval)
 
 var mutex = &sync.RWMutex{}
-var hmutex = &sync.RWMutex{}
 
 /*
 Below heap is used to store key and there corresponding expiry time as a MIN-HEAP
@@ -91,15 +90,14 @@ func periodic_expiry_check() {
 		for range ticker.C {
 			if exp_heap.Len() > 0 {
 
-				hmutex.Lock()
+				mutex.Lock()
 				item := exp_heap[0]
-				for item.priority <= time.Now().Unix() {
+				for item.priority < time.Now().Unix() {
 
 					item = heap.Pop(&exp_heap).(*exp_struct)
 
-					mutex.Lock()
 					delete(memmap, item.value)
-					mutex.Unlock()
+
 					if exp_heap.Len() > 0 {
 						item = exp_heap[0]
 					} else {
@@ -108,7 +106,7 @@ func periodic_expiry_check() {
 					}
 				}
 
-				hmutex.Unlock()
+				mutex.Unlock()
 			}
 		}
 	}()
@@ -239,7 +237,7 @@ func handleconnection(con net.Conn) {
 						memmap[key] = mapval{expirytime, new_version, numbytes, value, new_exp}
 
 						if expirytime != 0 {
-							hmutex.Lock()
+
 							n := exp_heap.Len()
 							for i := 0; i < n; i = i + 1 {
 
@@ -247,19 +245,18 @@ func handleconnection(con net.Conn) {
 									item := exp_heap[i]
 
 									exp_heap.update_node(item, item.value, new_exp)
-									hmutex.Unlock()
+
 									break
 
 								}
 							}
 
 						} else {
-							hmutex.Lock()
+
 							n1 := exp_heap.Len()
 							for i := 0; i < n1; i = i + 1 {
 								if exp_heap[i].value == key {
 									heap.Remove(&exp_heap, i)
-									hmutex.Unlock()
 									break
 								}
 							}
@@ -270,7 +267,6 @@ func handleconnection(con net.Conn) {
 
 						new_exp := time.Now().Unix() + int64(expirytime)
 						memmap[key] = mapval{expirytime, 0, numbytes, value, new_exp}
-						//TODO: calculate remaining time in CAS
 						//Below if will add key to expiry heap
 
 						if expirytime != 0 {
@@ -279,9 +275,9 @@ func handleconnection(con net.Conn) {
 								value:    key,
 								priority: new_exp,
 							}
-							hmutex.Lock()
+
 							heap.Push(&exp_heap, item)
-							hmutex.Unlock()
+
 						}
 
 					}
@@ -474,26 +470,22 @@ func handleconnection(con net.Conn) {
 
 							if expirytime != 0 {
 
-								hmutex.Lock()
 								n := exp_heap.Len()
 								for i := 0; i < n; i = i + 1 {
 
 									if exp_heap[i].value == key {
 										item := exp_heap[i]
 										exp_heap.update_node(item, item.value, new_exp)
-										hmutex.Unlock()
 										break
 
 									}
 								}
 
 							} else {
-								hmutex.Lock()
 								n1 := exp_heap.Len()
 								for i := 0; i < n1; i = i + 1 {
 									if exp_heap[i].value == key {
 										heap.Remove(&exp_heap, i)
-										hmutex.Unlock()
 										break
 									}
 								}
@@ -559,13 +551,12 @@ func handleconnection(con net.Conn) {
 			} else {
 
 				delete(memmap, req_key)
-				hmutex.Lock()
+
 				n1 := exp_heap.Len()
 				for i := 0; i < n1; i = i + 1 {
 					if exp_heap[i].value == req_key {
 
 						heap.Remove(&exp_heap, i)
-						hmutex.Unlock()
 						break
 					}
 				}
