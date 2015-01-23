@@ -1,47 +1,37 @@
 package main
-//package verbose
-
 
 import (
-	//"verbose"
-	//"fmt"
 	"bufio"
 	"bytes"
 	"io"
 	"net"
 	"strconv"
-	//"sync"
+
+	"strings"
 	"testing"
 	"time"
-	"strings"
-	
-	//	"math/rand"
 )
 
-var noOfThreads int = 2000
-var noOfRequestsPerThread int = 1
+var noOfThreads int = 3000
+var noOfRequestsPerThread int = 40
 var commands []string
 
-
-
-func init(){
-go main()
+func init() {
+	go main()
 }
 
-
-/* 
-TestConcurrentSet() checks concurrent set() operations by multiple clients and PASSes the test if version mateches the expected version number
+/*
+TestConcurrentSet() checks concurrent set() operations by multiple clients and PASSes the test if the last version number matches the expected version number
 */
 
 func TestConcurrentSet(t *testing.T) {
 
-	
 	done := make(chan bool)
 
 	//spwan client threads
 	i := 0
 	for i < noOfThreads {
-		go check_concurrent_set(t,done)
+		go check_concurrent_set(t, done)
 		i += 1
 	}
 	i = 0
@@ -55,7 +45,6 @@ func TestConcurrentSet(t *testing.T) {
 	<-done
 
 }
-
 
 /*
 check_concurrent_set_PASS() works for TestConcurrentSet() to check if value version matches expected number
@@ -85,12 +74,11 @@ func check_concurrent_set_PASS(t *testing.T, done chan bool) {
 
 }
 
-
 /*
 check_concurrent_set() spawns multiple client threads for TestConcurrentSet(), which will then call set() command on server
 
 */
-func check_concurrent_set(t *testing.T,done chan bool) {
+func check_concurrent_set(t *testing.T, done chan bool) {
 	conn, err := net.Dial("tcp", "127.0.0.1:9000")
 	if err != nil {
 		t.Error(err)
@@ -120,15 +108,14 @@ func check_concurrent_set(t *testing.T,done chan bool) {
 		t.Error(err)
 	}
 	done <- true
-	
+
 	conn.Close()
 }
+
 /*
 TestBasicFunctionality() tests for basic functionalities set,cas,delete,get,getm on single client
 */
 func TestBasicFunctionality(t *testing.T) {
-
-
 
 	done := make(chan bool)
 	go check_basic_functionality(t, done)
@@ -140,7 +127,7 @@ func TestBasicFunctionality(t *testing.T) {
 check_basic_functionality() actually performs basic operation for TestBasicFunctionality
 */
 
-func check_basic_functionality(t *testing.T,done chan bool) {
+func check_basic_functionality(t *testing.T, done chan bool) {
 	conn, err := net.Dial("tcp", "127.0.0.1:9000")
 	if err != nil {
 		t.Error(err)
@@ -149,125 +136,112 @@ func check_basic_functionality(t *testing.T,done chan bool) {
 	}
 	reader := bufio.NewReader(conn)
 
-
-
-	
-		
-		/*
+	/*
 		Checking set() functionality
-		*/
-		io.Copy(conn, bytes.NewBufferString("set key 10 5\r\nmayur\r\n"))
+	*/
+	io.Copy(conn, bytes.NewBufferString("set key 10 5\r\nmayur\r\n"))
 
-		data, err := reader.ReadBytes('\n')
-		input := strings.TrimRight(string(data), "\r\n")
-		array := strings.Split(input, " ")
-		result := array[0]
-		temp,_ :=strconv.Atoi(array[1])
+	data, err := reader.ReadBytes('\n')
+	input := strings.TrimRight(string(data), "\r\n")
+	array := strings.Split(input, " ")
+	result := array[0]
+	temp, _ := strconv.Atoi(array[1])
 
-		if result != "OK" || temp != 0 {
-			t.Fail()
-		}
+	if result != "OK" || temp != 0 {
+		t.Fail()
+	}
 
-		/*
+	/*
 		Checking get() functoinality
-		*/
-		io.Copy(conn, bytes.NewBufferString("get key\r\n"))
+	*/
+	io.Copy(conn, bytes.NewBufferString("get key\r\n"))
+	data, err = reader.ReadBytes('\n')
+	input = strings.TrimRight(string(data), "\r\n")
+	array = strings.Split(input, " ")
+	result = array[0]
+	if result == "VALUE" {
 		data, err = reader.ReadBytes('\n')
 		input = strings.TrimRight(string(data), "\r\n")
-		array = strings.Split(input, " ")
-		result = array[0]
-		if result == "VALUE" {
-			data, err = reader.ReadBytes('\n')
-			input = strings.TrimRight(string(data), "\r\n")
-			array1 := strings.Split(input, " ")
-			
-			temp ,_ = strconv.Atoi(array[1])
-			if temp != len(array1[0]) || array1[0] != "mayur" {
+		array1 := strings.Split(input, " ")
+
+		temp, _ = strconv.Atoi(array[1])
+		if temp != len(array1[0]) || array1[0] != "mayur" {
 			t.Fail()
-			}
-			
-		}else{
-		t.Fail()
 		}
 
+	} else {
+		t.Fail()
+	}
 
-	
-		/*
+	/*
 		Checking getm() functionality
-		*/
-	
-		io.Copy(conn, bytes.NewBufferString("getm key\r\n"))
+	*/
+
+	io.Copy(conn, bytes.NewBufferString("getm key\r\n"))
+	data, err = reader.ReadBytes('\n')
+	input = strings.TrimRight(string(data), "\r\n")
+	array = strings.Split(input, " ")
+	result = array[0]
+	if result == "VALUE" {
 		data, err = reader.ReadBytes('\n')
 		input = strings.TrimRight(string(data), "\r\n")
-		array = strings.Split(input, " ")
-		result = array[0]
-		if result == "VALUE" {
-			data, err = reader.ReadBytes('\n')
-			input = strings.TrimRight(string(data), "\r\n")
-			array1 := strings.Split(input, " ")
-			
-			temp ,_ = strconv.Atoi(array[3])
-			if temp != len(array1[0]) || array1[0] != "mayur" {
+		array1 := strings.Split(input, " ")
+
+		temp, _ = strconv.Atoi(array[3])
+		if temp != len(array1[0]) || array1[0] != "mayur" {
 			t.Fail()
-			}
-			
-		}else{
-		t.Fail()
 		}
 
-		
-		
-		/*
+	} else {
+		t.Fail()
+	}
+
+	/*
 		Checking cas() functionality
-		*/
-	
-		io.Copy(conn, bytes.NewBufferString("getm key\r\n"))
+	*/
+
+	io.Copy(conn, bytes.NewBufferString("getm key\r\n"))
+	data, err = reader.ReadBytes('\n')
+	input = strings.TrimRight(string(data), "\r\n")
+	array = strings.Split(input, " ")
+	result = array[0]
+	if result == "VALUE" {
 		data, err = reader.ReadBytes('\n')
 		input = strings.TrimRight(string(data), "\r\n")
-		array = strings.Split(input, " ")
-		result = array[0]
-		if result == "VALUE" {
-			data, err = reader.ReadBytes('\n')
-			input = strings.TrimRight(string(data), "\r\n")
-			array1 := strings.Split(input, " ")
-			
-			temp ,_ = strconv.Atoi(array[3])
-			if temp != len(array1[0]) || array1[0] != "mayur" {
+		array1 := strings.Split(input, " ")
+
+		temp, _ = strconv.Atoi(array[3])
+		if temp != len(array1[0]) || array1[0] != "mayur" {
 			t.Fail()
-			}
-			
-		}else{
-		t.Fail()
 		}
-	
 
-		/*
+	} else {
+		t.Fail()
+	}
+
+	/*
 		Checking delete() functionality
-		*/
-	
-		io.Copy(conn, bytes.NewBufferString("delete key\r\n"))
-		data, err = reader.ReadBytes('\n')
-		input = strings.TrimRight(string(data), "\r\n")
-		array = strings.Split(input, " ")
-		result = array[0]
-		if result != "DELETED" {
-		t.Fail()
-		}
+	*/
 
+	io.Copy(conn, bytes.NewBufferString("delete key\r\n"))
+	data, err = reader.ReadBytes('\n')
+	input = strings.TrimRight(string(data), "\r\n")
+	array = strings.Split(input, " ")
+	result = array[0]
+	if result != "DELETED" {
+		t.Fail()
+	}
 
 	done <- true
-	
+
 	conn.Close()
 
 }
-
 
 /*
 TestBasicErrorCommands() tests for basic functionalities set,cas,delete,get,getm on single client
 */
 func TestBasicErrorCommands(t *testing.T) {
-
-
 
 	done := make(chan bool)
 	go checkBasicErrorCommands(t, done)
@@ -279,7 +253,7 @@ func TestBasicErrorCommands(t *testing.T) {
 check_basic_functionality() actually performs basic operation for TestBasicFunctionality
 */
 
-func checkBasicErrorCommands(t *testing.T,done chan bool) {
+func checkBasicErrorCommands(t *testing.T, done chan bool) {
 	conn, err := net.Dial("tcp", "127.0.0.1:9000")
 	if err != nil {
 		t.Error(err)
@@ -287,97 +261,157 @@ func checkBasicErrorCommands(t *testing.T,done chan bool) {
 		return
 	}
 
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+
+	reader := bufio.NewReader(conn)
+
+	/*
+		Checking if there is any error message with 'noreply' flag and wrong command text
+
+	*/
+	io.Copy(conn, bytes.NewBufferString("set key abc 5 noreply\r\nmayur\r\n"))
+
+	_, error := reader.ReadBytes('\n')
+
+	if error == nil {
+		t.Fail()
+
+	}
+
+	/*
+		Checking error messsage when wrong command is sent
+	*/
 
 	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	
-	reader := bufio.NewReader(conn)	
-		
-		/*
-		Checking if there is any error message with 'noreply' flag and wrong command text
-		
-*/		
-		io.Copy(conn, bytes.NewBufferString("set key abc 5 noreply\r\nmayur\r\n"))
+	io.Copy(conn, bytes.NewBufferString("set key abc 5\r\nmayur\r\n"))
 
-		
-		_, error := reader.ReadBytes('\n')
-		
-		
-		if error == nil {
-			t.Fail()
-	
-		}
-	
+	data, err := reader.ReadBytes('\n')
+	input := strings.TrimRight(string(data), "\r\n")
+	if input != "ERRCMDERR" {
+		t.Fail()
+	}
+	io.Copy(conn, bytes.NewBufferString("set key 100 5\r\nmayur\r\n"))
 
+	data, err = reader.ReadBytes('\n')
+	input = strings.TrimRight(string(data), "\r\n")
+	array := strings.Split(input, " ")
+	result := array[0]
+	temp, _ := strconv.Atoi(array[1])
 
-		/*
-		Checking error messsage when wrong command is sent
-		*/
-		
-		conn.SetReadDeadline(time.Now().Add(2 * time.Second))	
-		io.Copy(conn, bytes.NewBufferString("set key abc 5\r\nmayur\r\n"))
+	if result != "OK" || temp != 0 {
+		t.Fail()
+	}
 
-		data, err := reader.ReadBytes('\n')
-		input := strings.TrimRight(string(data), "\r\n")
-				if input != "ERRCMDERR"{
-			t.Fail()
-		}
-		io.Copy(conn, bytes.NewBufferString("set key 100 5\r\nmayur\r\n"))
+	//t.Log(result,temp)
 
-		data, err = reader.ReadBytes('\n')
-		input = strings.TrimRight(string(data), "\r\n")
-		array := strings.Split(input, " ")
-		result := array[0]
-		temp,_ :=strconv.Atoi(array[1])
-		
-		if result != "OK" || temp != 0 {
-			t.Fail()
-		}
-		
-		//t.Log(result,temp)
-		
-		/*
+	/*
 		Test version mismatch error message in case of cas functionality
-		*/
-		
-		io.Copy(conn, bytes.NewBufferString("cas key 2672 1 5\r\nmayur\r\n"))
+	*/
 
-		data, err = reader.ReadBytes('\n')
-			
-		
-		input = strings.TrimRight(string(data), "\r\n")
-		//t.Log(input)	
-			
-				if input != "ERR_VERSION"{
-			t.Fail()
-		}
-		
-		/*
+	io.Copy(conn, bytes.NewBufferString("cas key 2672 1 5\r\nmayur\r\n"))
+
+	data, err = reader.ReadBytes('\n')
+
+	input = strings.TrimRight(string(data), "\r\n")
+	//t.Log(input)
+
+	if input != "ERR_VERSION" {
+		t.Fail()
+	}
+
+	/*
 		Test for wrong command sent to server
-		*/
-		
-		io.Copy(conn, bytes.NewBufferString("cal key 2672 1 5\r\nmayur\r\n"))
+	*/
 
-		data, err = reader.ReadBytes('\n')
-			
-		
-		input = strings.TrimRight(string(data), "\r\n")
-		//t.Log(input)	
-			
-				if input != "ERRCMDERR"{
-			t.Fail()
-		}
-		
+	io.Copy(conn, bytes.NewBufferString("cal key 2672 1 5\r\nmayur\r\n"))
 
-		
+	data, err = reader.ReadBytes('\n')
+
+	input = strings.TrimRight(string(data), "\r\n")
+	//t.Log(input)
+
+	if input != "ERRCMDERR" {
+		t.Fail()
+	}
+
 	done <- true
-	
+
 	conn.Close()
 
 }
 
+func TestExpiryOfKeys(t *testing.T) {
+	done := make(chan bool)
+	go checkTestExpiryOfKeys(t, done)
+	<-done
 
+}
 
+func checkTestExpiryOfKeys(t *testing.T, done chan bool) {
+	conn, err := net.Dial("tcp", "127.0.0.1:9000")
+	if err != nil {
+		t.Error(err)
+		done <- true
+		return
+	}
+	reader := bufio.NewReader(conn)
 
+	/*
+		Setting a key with expiry time 4 seconds
+	*/
+	io.Copy(conn, bytes.NewBufferString("set key5 4 5\r\nmayur\r\n"))
 
+	data, err := reader.ReadBytes('\n')
+	input := strings.TrimRight(string(data), "\r\n")
+	array := strings.Split(input, " ")
+	result := array[0]
+	temp, _ := strconv.Atoi(array[1])
 
+	if result != "OK" || temp != 0 {
+		t.Fail()
+	}
 
+	/*
+		Checking if key exists before expiry
+	*/
+	io.Copy(conn, bytes.NewBufferString("get key5\r\n"))
+	data, err = reader.ReadBytes('\n')
+	input = strings.TrimRight(string(data), "\r\n")
+	array = strings.Split(input, " ")
+	result = array[0]
+
+	if result == "VALUE" {
+		data, err = reader.ReadBytes('\n')
+		input = strings.TrimRight(string(data), "\r\n")
+		array1 := strings.Split(input, " ")
+
+		temp, _ = strconv.Atoi(array[1])
+
+		if temp != len(array1[0]) || array1[0] != "mayur" {
+			t.Fail()
+		}
+
+	} else {
+		t.Fail()
+	}
+
+	/* Sleeping for 5 seconds and then try to access to the key value which is supposed to be expired*/
+
+	timer := time.NewTimer(time.Duration(5) * time.Second)
+	go func() {
+		<-timer.C
+		io.Copy(conn, bytes.NewBufferString("get key5\r\n"))
+
+		data, err = reader.ReadBytes('\n')
+		input = strings.TrimRight(string(data), "\r\n")
+		if input != "ERRNOTFOUND" {
+			t.Fail()
+		}
+
+	}()
+
+	done <- true
+
+	conn.Close()
+
+}
