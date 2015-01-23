@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"container/heap"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strconv"
@@ -119,22 +122,60 @@ func periodic_expiry_check() {
 
 handleconnection(): for each TCP connection this function parses command from client and sends appropriate reply
 
+
+func periodic_expiry_check() {
+
+	ticker := time.NewTicker(time.Millisecond * 5000)
+	go func() {
+		for range ticker.C {
+
+				mutex.Lock()
+
+				for key := range memmap {
+
+				if memmap[key].timestamp < time.Now().Unix() && memmap[key].expirytime != 0{
+				delete(memmap,key)
+				}
+
+
+
+			}
+			mutex.Unlock()
+		}
+	}()
+
+	select {}
+
+}
+
+
 */
 func handleconnection(con net.Conn) {
-	var (
-		data = make([]byte, 1024)
-	)
+
 	var response string
 	var read = true
+
+	reader := bufio.NewReader(con)
+
 	for read {
-		n, error := con.Read(data)
+
+		data, error := reader.ReadBytes('\n')
+
+		if error == io.EOF {
+			message := "ERR_INTERNAL\r\n"
+			io.Copy(con, bytes.NewBufferString(message))
+			break
+		}
 
 		if error != nil {
 			message := "ERR_INTERNAL\r\n"
-			con.Write([]byte(message))
+			io.Copy(con, bytes.NewBufferString(message))
+			break
 		}
 
-		response = string(data[0:n])
+		response = string(data)
+		//fmt.Print("FIrst: ",response)
+
 		var res []string
 		res = strings.Split((response), " ")
 
@@ -149,13 +190,13 @@ func handleconnection(con net.Conn) {
 			cmd_err = false
 			if len(res) != 5 && len(res) != 4 {
 				message := "ERRCMDERR\r\n"
-				con.Write([]byte(message))
+				io.Copy(con, bytes.NewBufferString(message))
 				break
 			}
 
 			if res[1] == "" {
 				message := "ERRCMDERR\r\n"
-				con.Write([]byte(message))
+				io.Copy(con, bytes.NewBufferString(message))
 			} else {
 				key = strings.TrimSpace(res[1])
 
@@ -164,7 +205,7 @@ func handleconnection(con net.Conn) {
 				if len(res) == 5 {
 					if res[4] != "noreply\r\n" {
 						message := "ERRCMDERR\r\n"
-						con.Write([]byte(message))
+						io.Copy(con, bytes.NewBufferString(message))
 						break
 					} else {
 						reply_flag = false
@@ -204,22 +245,23 @@ func handleconnection(con net.Conn) {
 					cmd_err = true
 				}
 
-				n, error := con.Read(data)
+				data, error := reader.ReadBytes('\n')
 				if error != nil {
 					message := "ERR_INTERNAL\r\n"
-					con.Write([]byte(message))
+					io.Copy(con, bytes.NewBufferString(message))
 					break
 				}
-				value = string(data[0:n])
+				value = string(data)
 
-				if n == (numbytes + 2) {
+				if len(value) == (numbytes + 2) {
 
 					value = strings.TrimSpace(value)
 
 					if cmd_err == true {
 						if reply_flag == true {
 							message := "ERRCMDERR\r\n"
-							con.Write([]byte(message))
+							io.Copy(con, bytes.NewBufferString(message))
+
 						}
 						break
 
@@ -285,14 +327,14 @@ func handleconnection(con net.Conn) {
 						message := "OK "
 						message = message + strconv.FormatInt(memmap[key].version, 10) + "\r\n"
 
-						con.Write([]byte(message))
+						io.Copy(con, bytes.NewBufferString(message))
 					}
 
 					mutex.Unlock()
 				} else {
 					if reply_flag == true {
 						message := "ERRCMDERR\r\n"
-						con.Write([]byte(message))
+						io.Copy(con, bytes.NewBufferString(message))
 					}
 					break
 
@@ -315,21 +357,21 @@ func handleconnection(con net.Conn) {
 
 			if ok == false || value.timestamp < time.Now().Unix() {
 				message := "ERRNOTFOUND\r\n"
-				con.Write([]byte(message))
+				io.Copy(con, bytes.NewBufferString(message))
 				break
 			} else {
 				message := "VALUE "
 				message = message + strconv.Itoa(value.numbytes)
 				message = message + "\r\n"
 				message = message + value.value + "\r\n"
-				con.Write([]byte(message))
+				io.Copy(con, bytes.NewBufferString(message))
 			}
 
 		case "getm":
 
 			if len(res) != 2 {
 				message := "ERRCMDERR\r\n"
-				con.Write([]byte(message))
+				io.Copy(con, bytes.NewBufferString(message))
 				break
 			}
 
@@ -341,7 +383,7 @@ func handleconnection(con net.Conn) {
 
 			if ok == false || value.timestamp < time.Now().Unix() {
 				message := "ERRNOTFOUND\r\n"
-				con.Write([]byte(message))
+				io.Copy(con, bytes.NewBufferString(message))
 				break
 			} else {
 
@@ -350,7 +392,7 @@ func handleconnection(con net.Conn) {
 				message := "VALUE" + " " + strconv.FormatInt(value.version, 10) + " " + strconv.FormatInt(diff_expiry, 10) + " " + strconv.Itoa(value.numbytes) + "\r\n"
 
 				message = message + value.value + "\r\n"
-				con.Write([]byte(message))
+				io.Copy(con, bytes.NewBufferString(message))
 			}
 
 		case "cas":
@@ -365,7 +407,7 @@ func handleconnection(con net.Conn) {
 
 			if len(res) != 5 && len(res) != 6 {
 				message := "ERRCMDERR\r\n"
-				con.Write([]byte(message))
+				io.Copy(con, bytes.NewBufferString(message))
 				break
 			}
 
@@ -373,8 +415,8 @@ func handleconnection(con net.Conn) {
 			reply_flag = true
 			if len(res) == 6 {
 				if res[5] != "noreply\r\n" {
-					message := "ERRCMDERR43\r\n"
-					con.Write([]byte(message))
+					message := "ERRCMDERR\r\n"
+					io.Copy(con, bytes.NewBufferString(message))
 					break
 				} else {
 					reply_flag = false
@@ -383,7 +425,7 @@ func handleconnection(con net.Conn) {
 
 			if res[1] == "" {
 				message := "ERRCMDERR\r\n"
-				con.Write([]byte(message))
+				io.Copy(con, bytes.NewBufferString(message))
 			} else {
 				key = strings.TrimSpace(res[1])
 
@@ -406,6 +448,7 @@ func handleconnection(con net.Conn) {
 				if _, err := strconv.ParseInt(res[3], 10, 64); err == nil {
 
 					temp_version, _ := strconv.ParseInt(res[3], 10, 64)
+
 					if temp_version >= 0 {
 						version = temp_version
 					} else {
@@ -419,8 +462,7 @@ func handleconnection(con net.Conn) {
 
 				if _, errn := strconv.Atoi(temp_str); errn == nil {
 
-					temp_numbytes, _ := strconv.Atoi(res[2])
-
+					temp_numbytes, _ := strconv.Atoi(temp_str)
 					if temp_numbytes > 0 {
 						numbytes = temp_numbytes
 					} else {
@@ -430,22 +472,23 @@ func handleconnection(con net.Conn) {
 					err_cmd = true
 				}
 
-				n, error := con.Read(data)
+				data, error := reader.ReadBytes('\n')
+
 				if error != nil {
 					message := "ERR_INTERNAL\r\n"
-					con.Write([]byte(message))
+					io.Copy(con, bytes.NewBufferString(message))
 					break
 				}
-				value = string(data[0:n])
+				value = string(data)
 
 				if err_cmd == true {
 					message := "ERRCMDERR\r\n"
-					con.Write([]byte(message))
+					io.Copy(con, bytes.NewBufferString(message))
 					break
 
 				}
 
-				if n == (numbytes + 2) {
+				if len(value) == (numbytes + 2) {
 
 					value = strings.TrimSpace(value)
 					mutex.Lock()
@@ -457,7 +500,7 @@ func handleconnection(con net.Conn) {
 							if memmap[key].timestamp < time.Now().Unix() {
 								if reply_flag == true {
 									message := "ERRNOTFOUND\r\n"
-									con.Write([]byte(message))
+									io.Copy(con, bytes.NewBufferString(message))
 								}
 
 								mutex.Unlock()
@@ -493,8 +536,8 @@ func handleconnection(con net.Conn) {
 							}
 						} else {
 							if reply_flag == true {
-								message := "ERRCMDERR\r\n"
-								con.Write([]byte(message))
+								message := "ERR_VERSION\r\n"
+								io.Copy(con, bytes.NewBufferString(message))
 							}
 
 							mutex.Unlock()
@@ -504,8 +547,8 @@ func handleconnection(con net.Conn) {
 
 					} else {
 						if reply_flag == true {
-							message := "ERRCMDERR\r\n"
-							con.Write([]byte(message))
+							message := "ERRNOTFOUND\r\n"
+							io.Copy(con, bytes.NewBufferString(message))
 						}
 
 						mutex.Unlock()
@@ -517,7 +560,7 @@ func handleconnection(con net.Conn) {
 						message := "OK "
 						message = message + strconv.FormatInt(memmap[key].version, 10) + "\r\n"
 
-						con.Write([]byte(message))
+						io.Copy(con, bytes.NewBufferString(message))
 						mutex.Unlock()
 						break
 
@@ -526,7 +569,7 @@ func handleconnection(con net.Conn) {
 
 					if reply_flag == true {
 						message := "ERRCMDERR\r\n"
-						con.Write([]byte(message))
+						io.Copy(con, bytes.NewBufferString(message))
 					}
 				}
 
@@ -535,7 +578,7 @@ func handleconnection(con net.Conn) {
 
 			if len(res) != 2 {
 				message := "ERRCMDERR\r\n"
-				con.Write([]byte(message))
+				io.Copy(con, bytes.NewBufferString(message))
 				break
 			}
 
@@ -545,7 +588,7 @@ func handleconnection(con net.Conn) {
 			_, ok := memmap[req_key]
 			if ok == false || memmap[req_key].timestamp < time.Now().Unix() {
 				message := "ERRNOTFOUND\r\n"
-				con.Write([]byte(message))
+				io.Copy(con, bytes.NewBufferString(message))
 				mutex.Unlock()
 				break
 			} else {
@@ -562,13 +605,13 @@ func handleconnection(con net.Conn) {
 				}
 
 				message := "DELETED\r\n"
-				con.Write([]byte(message))
+				io.Copy(con, bytes.NewBufferString(message))
 				mutex.Unlock()
 			}
 
 		default:
 			message := "ERRCMDERR\r\n"
-			con.Write([]byte(message))
+			io.Copy(con, bytes.NewBufferString(message))
 
 		}
 
