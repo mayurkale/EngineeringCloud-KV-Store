@@ -5,15 +5,15 @@ import (
 	"bytes"
 	"io"
 	"net"
+	"math/rand"
 	"strconv"
-
 	"strings"
 	"testing"
 	"time"
 )
 
-var noOfThreads int = 3000
-var noOfRequestsPerThread int = 40
+var noOfThreads int = 1000
+var noOfRequestsPerThread int = 50
 var commands []string
 
 func init() {
@@ -415,3 +415,85 @@ func checkTestExpiryOfKeys(t *testing.T, done chan bool) {
 	conn.Close()
 
 }
+
+
+/*
+TestConcurrentMulti() tests ability of system to sustain multiple commands from multiple clients and ensures clients are responded with proper response to clients.
+*/
+
+func TestConcurrentMulti(t *testing.T) {
+
+	commands = []string{
+		"set DUMMYKEY 15 10\r\nDUMMYVALUE\r\n",
+		"set DUMMYKEY2 15 10\r\nDUMMYVALUE\r\n",			
+		"delete DUMMYKEY2\r\n",
+		"delete DUMMYKEY\r\n",
+		"getm DUMMYKEY\r\n",
+		"getm DUMMYKEY2\r\n",
+	}
+
+	done := make(chan bool)
+
+	i := 0
+	for i < noOfThreads {
+		go CheckConcurrentMulti(t, done)
+		i += 1
+	}
+	i = 0
+
+	for i < noOfThreads {
+		<-done
+		i += 1
+	}
+
+	
+
+}
+
+func CheckConcurrentMulti(t *testing.T, done chan bool) {
+	conn, err := net.Dial("tcp", "127.0.0.1:9000")
+	if err != nil {
+		t.Error(err)
+		done <- true
+		return
+	}
+	reader := bufio.NewReader(conn)
+	i := 0
+	randomGenerator := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for i < noOfRequestsPerThread {
+	index := randomGenerator.Int() % len(commands)
+	io.Copy(conn, bytes.NewBufferString(commands[index]))
+		
+
+		data,_ := reader.ReadBytes('\n')
+		input := strings.TrimRight(string(data), "\r\n")
+		array := strings.Split(input, " ")
+		result := array[0]
+		if result == "VALUE"{
+			data,_ = reader.ReadBytes('\n')
+			input := strings.TrimRight(string(data), "\r\n")
+			temp,_ := strconv.Atoi(array[2])
+			if input != "DUMMYVALUE" && temp <= 15{
+			
+			t.Fail()
+			}
+			
+		}else{
+		
+		if result != "ERRNOTFOUND" && result != "ERR_VERSION" && result != "DELETED" && result != "OK" {
+		
+		t.Fail()
+		}
+		}
+	
+	i = i+1
+	}
+	
+	
+	
+	done <- true
+
+	conn.Close()
+	
+	}
+

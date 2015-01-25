@@ -28,6 +28,7 @@ type mapval struct {
 type exp_struct struct {
 	value    string
 	priority int64
+	init_ts  int64
 	index    int
 }
 
@@ -95,11 +96,16 @@ func periodic_expiry_check() {
 
 				mutex.Lock()
 				item := exp_heap[0]
+				val, ok := memmap[item.value]
+
 				for item.priority < time.Now().Unix() {
 
-					item = heap.Pop(&exp_heap).(*exp_struct)
+					if ok == true && item.init_ts == (val.timestamp-int64(val.expirytime)) {
 
-					delete(memmap, item.value)
+						delete(memmap, item.value)
+					}
+
+					item = heap.Pop(&exp_heap).(*exp_struct)
 
 					if exp_heap.Len() > 0 {
 						item = exp_heap[0]
@@ -121,35 +127,8 @@ func periodic_expiry_check() {
 /*
 
 handleconnection(): for each TCP connection this function parses command from client and sends appropriate reply
-
-
-func periodic_expiry_check() {
-
-	ticker := time.NewTicker(time.Millisecond * 5000)
-	go func() {
-		for range ticker.C {
-
-				mutex.Lock()
-
-				for key := range memmap {
-
-				if memmap[key].timestamp < time.Now().Unix() && memmap[key].expirytime != 0{
-				delete(memmap,key)
-				}
-
-
-
-			}
-			mutex.Unlock()
-		}
-	}()
-
-	select {}
-
-}
-
-
 */
+
 func handleconnection(con net.Conn) {
 
 	var response string
@@ -270,59 +249,34 @@ func handleconnection(con net.Conn) {
 					mutex.Lock()
 
 					_, ok := memmap[key]
-
+					cur_ts := time.Now().Unix()
+					new_exp := cur_ts + int64(expirytime)
 					if ok == true {
 						new_version := memmap[key].version
 						new_version = new_version + 1
 
-						new_exp := time.Now().Unix() + int64(expirytime)
 						memmap[key] = mapval{expirytime, new_version, numbytes, value, new_exp}
-
-						if expirytime != 0 {
-
-							n := exp_heap.Len()
-							for i := 0; i < n; i = i + 1 {
-
-								if exp_heap[i].value == key {
-									item := exp_heap[i]
-
-									exp_heap.update_node(item, item.value, new_exp)
-
-									break
-
-								}
-							}
-
-						} else {
-
-							n1 := exp_heap.Len()
-							for i := 0; i < n1; i = i + 1 {
-								if exp_heap[i].value == key {
-									heap.Remove(&exp_heap, i)
-									break
-								}
-							}
-
-						}
 
 					} else {
 
-						new_exp := time.Now().Unix() + int64(expirytime)
 						memmap[key] = mapval{expirytime, 0, numbytes, value, new_exp}
-						//Below if will add key to expiry heap
-
-						if expirytime != 0 {
-
-							item := &exp_struct{
-								value:    key,
-								priority: new_exp,
-							}
-
-							heap.Push(&exp_heap, item)
-
-						}
 
 					}
+
+					//Below if will add key to expiry heap
+
+					if expirytime != 0 {
+
+						item := &exp_struct{
+							value:    key,
+							priority: new_exp,
+							init_ts:  cur_ts,
+						}
+
+						heap.Push(&exp_heap, item)
+
+					}
+
 					if reply_flag == true {
 						message := "OK "
 						message = message + strconv.FormatInt(memmap[key].version, 10) + "\r\n"
@@ -507,31 +461,21 @@ func handleconnection(con net.Conn) {
 								break
 
 							}
-
+							cur_ts := time.Now().Unix()
 							new_exp := time.Now().Unix() + int64(expirytime)
 							memmap[key] = mapval{expirytime, memmap[key].version + 1, numbytes, value, new_exp}
 
+							//Below if will add key to expiry heap
+
 							if expirytime != 0 {
 
-								n := exp_heap.Len()
-								for i := 0; i < n; i = i + 1 {
-
-									if exp_heap[i].value == key {
-										item := exp_heap[i]
-										exp_heap.update_node(item, item.value, new_exp)
-										break
-
-									}
+								item := &exp_struct{
+									value:    key,
+									priority: new_exp,
+									init_ts:  cur_ts,
 								}
 
-							} else {
-								n1 := exp_heap.Len()
-								for i := 0; i < n1; i = i + 1 {
-									if exp_heap[i].value == key {
-										heap.Remove(&exp_heap, i)
-										break
-									}
-								}
+								heap.Push(&exp_heap, item)
 
 							}
 						} else {
@@ -594,16 +538,6 @@ func handleconnection(con net.Conn) {
 			} else {
 
 				delete(memmap, req_key)
-
-				n1 := exp_heap.Len()
-				for i := 0; i < n1; i = i + 1 {
-					if exp_heap[i].value == req_key {
-
-						heap.Remove(&exp_heap, i)
-						break
-					}
-				}
-
 				message := "DELETED\r\n"
 				io.Copy(con, bytes.NewBufferString(message))
 				mutex.Unlock()
